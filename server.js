@@ -8,6 +8,26 @@ let url = '';
 let shortUrl = 0;
 let objList = {};
 let count = 1;
+const mongoose = require('mongoose');
+const AutoIncrement = require('mongoose-sequence')(mongoose);
+
+const urlSchema = new mongoose.Schema(
+	{
+		fullUrl: { type: String, required: true, unique: true },
+	},
+	{ timestamps: true }
+);
+
+urlSchema.plugin(AutoIncrement, { inc_field: 'urlNumber' });
+
+const URL = mongoose.model('URL', urlSchema);
+
+const MONGO_URI = process.env.MONGO_URI;
+
+mongoose.connect(MONGO_URI, {
+	useNewUrlParser: true,
+	useUnifiedTopology: true,
+});
 
 // parse application/x-www-form-urlencoded
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -33,21 +53,29 @@ app.get('/api/hello', function (req, res) {
 // POST
 app.post('/api/shorturl', function (req, res) {
 	console.log(req.body.url);
+
 	function isValidURL(string) {
 		var res = string.match(
 			/(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/g
 		);
 		return res !== null;
 	}
-	if (isValidURL(req.body.url)) {
-		url = req.body.url;
-		console.log(objList[url]);
-		if (!objList[url]) {
-			shortUrl = count;
-			objList[url] = shortUrl;
-			count++;
+
+	const createUrlObject = async (urlValue) => {
+		try {
+			const urlObject = await URL.create({ fullUrl: urlValue });
+			console.log(urlObject);
+			res.json({
+				original_url: urlObject.fullUrl,
+				short_url: urlObject.urlNumber,
+			});
+		} catch (error) {
+			res.json({ error: 'url already exists' });
 		}
-		res.json({ original_url: url, short_url: shortUrl });
+	};
+
+	if (isValidURL(req.body.url)) {
+		createUrlObject(req.body.url);
 	} else {
 		res.json({ error: 'invalid url' });
 	}
@@ -56,24 +84,28 @@ app.post('/api/shorturl', function (req, res) {
 // GET
 app.get('/api/shorturl/:short_url', function (req, res) {
 	console.log(req.params.short_url);
-	function getKeyByValue(object, value) {
-		return Object.keys(object).find((key) => object[key] === value);
-	}
-	console.log('one : ', getKeyByValue(objList, Number(req.params.short_url)));
-	console.log('two : ', objList);
-	const fullUrl = getKeyByValue(objList, Number(req.params.short_url));
-	if (fullUrl) {
-		res
-			.writeHead(301, {
-				Location: fullUrl,
-			})
-			.end();
-	} else {
+	const shortUrl = req.params.short_url;
+
+	if (isNaN(shortUrl) || Number(shortUrl) < 1) {
 		res.json({ error: 'invalid url' });
 	}
-});
 
-console.log(objList);
+	const findUrlObject = async (shortUrlValue) => {
+		const urlObject = await URL.findOne({ urlNumber: Number(shortUrlValue) });
+		console.log(urlObject);
+		if (urlObject) {
+			res
+				.writeHead(301, {
+					Location: urlObject.fullUrl,
+				})
+				.end();
+		} else {
+			res.json({ error: 'invalid url' });
+		}
+	};
+
+	findUrlObject(shortUrl);
+});
 
 app.listen(port, function () {
 	console.log(`Listening on port ${port}`);
