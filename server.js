@@ -6,6 +6,8 @@ var bodyParser = require('body-parser');
 var dns = require('dns');
 let url = '';
 let shortUrl = 0;
+let objList = {};
+let count = 1;
 
 // parse application/x-www-form-urlencoded
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -39,11 +41,14 @@ app.post('/api/shorturl', function (req, res) {
 	}
 	if (isValidURL(req.body.url)) {
 		url = req.body.url;
-		shortUrl = 1;
+		console.log(objList[url]);
+		if (!objList[url]) {
+			shortUrl = count;
+			objList[url] = shortUrl;
+			count++;
+		}
 		res.json({ original_url: url, short_url: shortUrl });
 	} else {
-		url = '';
-		shortUrl = 0;
 		res.json({ error: 'invalid url' });
 	}
 });
@@ -51,16 +56,24 @@ app.post('/api/shorturl', function (req, res) {
 // GET
 app.get('/api/shorturl/:short_url', function (req, res) {
 	console.log(req.params.short_url);
-	if (req.params.short_url === '' + shortUrl) {
+	function getKeyByValue(object, value) {
+		return Object.keys(object).find((key) => object[key] === value);
+	}
+	console.log('one : ', getKeyByValue(objList, Number(req.params.short_url)));
+	console.log('two : ', objList);
+	const fullUrl = getKeyByValue(objList, Number(req.params.short_url));
+	if (fullUrl) {
 		res
 			.writeHead(301, {
-				Location: url,
+				Location: fullUrl,
 			})
 			.end();
 	} else {
 		res.json({ error: 'invalid url' });
 	}
 });
+
+console.log(objList);
 
 app.listen(port, function () {
 	console.log(`Listening on port ${port}`);
